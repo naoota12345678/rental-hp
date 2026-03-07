@@ -1,0 +1,134 @@
+
+
+<!-- HEADER -->
+<header>
+  <div class="logo" style="display:flex; align-items:center; gap:8px; line-height:1;">
+    <div style="display:flex; align-items:stretch; gap:0;">
+      <span class="logo-num">35000</span><span class="logo-en">円</span>
+    </div>
+    <img src="/images/hero-image-0.png" alt="レンタカー" style="height:44px; width:auto;" />
+  </div>
+  <nav>
+    <a href="#">サービス</a>
+    <a href="#">料金</a>
+    <a href="#">店舗案内</a>
+    <a href="#booking" class="nav-btn">今すぐ予約</a>
+  </nav>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg-text">35K</div>
+  <div class="hero-tag">✦ FLAT RATE RENTAL CAR SERVICE</div>
+  <img src="/images/hero-image-1.png" alt="35000ENレンタカー" style="max-width:680px; width:100%; margin-bottom:8px; animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;" />
+  <p class="hero-sub">明瞭会計。好きなときに好きなだけ。シンプルで明快なレンタカーサービスです。</p>
+  <div class="hero-cta">
+    <a href="#booking" class="btn-primary">予約する →</a>
+    <a href="#price" class="btn-secondary">料金を見る</a>
+  </div>
+
+
+</section>
+
+<!-- MARQUEE -->
+<div class="marquee-wrap">
+  <div class="marquee-inner">
+    <span class="marquee-item">¥35,000 / MONTH</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">FLAT RATE</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">配車サービスあり</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">NO HIDDEN FEES</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">簡単ネット予約</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">¥35,000 / MONTH</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">FLAT RATE</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">配車サービスあり</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">NO HIDDEN FEES</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">簡単ネット予約</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">¥35,000 / MONTH</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">FLAT RATE</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">配車サービスあり</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">NO HIDDEN FEES</span><span class="marquee-dot">◆</span>
+    <span class="marquee-item">簡単ネット予約</span><span class="marquee-dot">◆</span>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features">
+  <p class="section-label">✦ WHY CHOOSE US</p>
+  <h2 class="section-title">選ばれる3つの理由</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-num">01</div>
+      <div class="feature-title">明快な料金体系</div>
+      <p class="feature-desc">走行距離・時間を気にせず使えます。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">02</div>
+      <div class="feature-title">配車サービス完備</div>
+      <p class="feature-desc">ご指定の場所までお届けします。来店が難しい方もお気軽にご利用ください。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">03</div>
+      <div class="feature-title">ネット予約24時間</div>
+      <p class="feature-desc">スマートフォンから簡単予約。Googleカレンダーと連動した空き確認で手間なし。</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICE -->
+<section class="price-section" id="price">
+  <div class="price-display">
+    <p class="section-label">✦ PRICING</p>
+    <div class="price-big">35,000<span class="price-unit">円</span></div>
+    <div class="price-line"></div>
+    <p class="price-note">月額（税込）／ 1台あたり<br>最低契約期間なし・いつでも解約可</p>
+  </div>
+  <div>
+    <p class="section-label">✦ 含まれるもの</p>
+    <h3 class="section-title" style="font-size:28px; margin-bottom:32px;">すべて込みの料金です</h3>
+    <ul class="price-features">
+      <li>走行距離無制限</li>
+      <li>保険料込み</li>
+      <li>24時間サポート</li>
+      <li>配車・引き取りサービス</li>
+      <li>来店受け取りも選択可</li>
+      <li>ネット予約・変更・キャンセル無料</li>
+    </ul>
+  </div>
+</section>
+
+<!-- BOOKING -->
+<section class="booking" id="booking">
+  <div class="booking-inner">
+    <p class="section-label" style="text-align:center;">✦ RESERVATION</p>
+    <h2 class="booking-title">ご予約はこちら</h2>
+    <p class="booking-sub">受け取り方法をお選びください。<br>配車をご希望の方も、来店の方も、同じフォームから予約できます。</p>
+
+    <div class="booking-options">
+      <div class="booking-option active" onclick="this.classList.toggle('active')">
+        <div class="option-icon">🚗</div>
+        <div class="option-title">配車サービスを利用する</div>
+        <p class="option-desc">ご指定の住所まで車をお届けします。配車先・時間を選択してください。</p>
+      </div>
+      <div class="booking-option" onclick="this.classList.toggle('active')">
+        <div class="option-icon">🏪</div>
+        <div class="option-title">店舗で受け取る</div>
+        <p class="option-desc">店舗まで来店いただきます。来店時間をカレンダーからお選びください。</p>
+      </div>
+    </div>
+
+    <div class="cal-placeholder">
+      <strong>📅 Googleカレンダー 予約フォーム</strong>
+      ここにGoogleカレンダーの予約ページが埋め込まれます<br>
+      <small style="font-size:11px; margin-top:8px; display:block; opacity:0.5;">（実装時にiframeで挿入）</small>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="logo">
+    <span class="logo-num">35000</span><span class="logo-en">円</span><span class="logo-kata">レンタカー</span>
+  </div>
+  <p class="footer-copy">© 2026 35000EN レンタカー. All rights reserved.</p>
+</footer>
+

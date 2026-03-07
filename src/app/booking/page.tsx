@@ -354,7 +354,7 @@ export default function BookingPage() {
                 </div>
 
                 {/* 料金プレビュー */}
-                {selectedClass && rentalDays > 0 && (
+                {selectedClass && rentalDays > 0 && (() => { console.log("Price calc:", { selectedClass, rentalDays, rentalPrice, breakdown, plansCount: plans.length, matchingPlans: plans.filter(p => p.vehicleClass === selectedClass).length }); return true; })() && (
                   <div style={{
                     background: "var(--black)",
                     border: "2px solid rgba(255,255,255,0.1)",

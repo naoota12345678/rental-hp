@@ -146,6 +146,13 @@ export default function BookingPage() {
       setPlans(
         plansSnap.docs.map((d) => ({ id: d.id, ...d.data() } as PricingPlan))
       );
+      console.log("Loaded data:", {
+        areas: areasSnap.docs.length,
+        vehicles: vehiclesSnap.docs.length,
+        plans: plansSnap.docs.length,
+        vehicleStatuses: vehiclesSnap.docs.map(d => d.data().status),
+        planDetails: plansSnap.docs.map(d => ({ name: d.data().name, class: d.data().vehicleClass, days: d.data().durationDays, price: d.data().basePrice, active: d.data().isActive })),
+      });
     } catch (err) {
       console.error("データ取得エラー:", err);
     } finally {

@@ -490,6 +490,15 @@ body {
   text-align: center;
 }
 
+.step-heading {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--yellow);
+  margin-bottom: 16px;
+  letter-spacing: 0.1em;
+  text-align: left;
+}
+
 .message-error {
   background: rgba(255, 23, 68, 0.1);
   border: 2px solid rgba(255, 23, 68, 0.3);

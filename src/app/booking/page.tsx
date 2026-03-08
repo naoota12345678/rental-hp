@@ -458,7 +458,7 @@ export default function BookingPage() {
                     {availableClasses.map((c) => (
                       <div
                         key={c.key}
-                        onClick={() => { setSelectedClass(c.key); setSelectedVehicleId(""); }}
+                        onClick={() => { setSelectedClass(c.key); setSelectedVehicleId(""); setDateRange(undefined); }}
                         className={`booking-option ${selectedClass === c.key ? "active" : ""}`}
                         style={{ padding: "20px 16px" }}
                       >

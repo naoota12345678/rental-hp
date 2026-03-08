@@ -115,6 +115,63 @@ function isVehicleAvailable(
   return { available: true };
 }
 
+// --- ある日に特定車種で空きがあるか ---
+function getUnavailableDates(
+  vehicles: Vehicle[],
+  bookings: ExistingBooking[],
+  vehicleClass: string,
+): Date[] {
+  const classVehicles = vehicles.filter((v) => v.vehicleClass === vehicleClass);
+  if (classVehicles.length === 0) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const unavailable: Date[] = [];
+
+  // 90日先まで判定
+  for (let i = 0; i < 90; i++) {
+    const day = new Date(today);
+    day.setDate(day.getDate() + i);
+    const nextDay = new Date(day);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const availCount = classVehicles.filter(
+      (v) => isVehicleAvailable(v, bookings, day, nextDay).available
+    ).length;
+
+    if (availCount === 0) {
+      unavailable.push(day);
+    }
+  }
+  return unavailable;
+}
+
+// --- 最短利用可能日 ---
+function getEarliestAvailableDate(
+  vehicles: Vehicle[],
+  bookings: ExistingBooking[],
+  vehicleClass: string,
+): Date | null {
+  const classVehicles = vehicles.filter((v) => v.vehicleClass === vehicleClass);
+  if (classVehicles.length === 0) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 90; i++) {
+    const day = new Date(today);
+    day.setDate(day.getDate() + i);
+    const nextDay = new Date(day);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const hasAvail = classVehicles.some(
+      (v) => isVehicleAvailable(v, bookings, day, nextDay).available
+    );
+    if (hasAvail) return day;
+  }
+  return null;
+}
+
 // --- 料金計算 ---
 function calcBestPrice(plans: PricingPlan[], vehicleClass: string, days: number): { price: number; breakdown: string } {
   if (days <= 0) return { price: 0, breakdown: "" };
@@ -278,6 +335,22 @@ export default function BookingPage() {
     [vehicles, selectedClass]
   );
 
+  // カレンダーで全車両埋まってる日をdisable
+  const calendarDisabledDates = useMemo(() => {
+    if (!selectedClass) return [];
+    return getUnavailableDates(vehicles, bookings, selectedClass);
+  }, [selectedClass, vehicles, bookings]);
+
+  // 車種ごとの最短利用可能日
+  const earliestDates = useMemo(() => {
+    const result = new Map<string, Date | null>();
+    const classSet = new Set(vehicles.map((v) => v.vehicleClass));
+    classSet.forEach((vc) => {
+      result.set(vc, getEarliestAvailableDate(vehicles, bookings, vc));
+    });
+    return result;
+  }, [vehicles, bookings]);
+
   const { price: rentalPrice, breakdown } = useMemo(
     () => calcBestPrice(plans, selectedClass, rentalDays),
     [plans, selectedClass, rentalDays]
@@ -391,6 +464,10 @@ export default function BookingPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
                     {availableClasses.map((c) => {
                       const noAvail = c.available === 0;
+                      const earliest = earliestDates.get(c.key);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const isToday = earliest && earliest.getTime() === today.getTime();
                       return (
                         <div
                           key={c.key}
@@ -400,8 +477,15 @@ export default function BookingPage() {
                         >
                           <div className="option-title" style={{ fontSize: "14px", marginBottom: "4px" }}>{c.label}</div>
                           <p className="option-desc" style={{ color: noAvail ? "#ff4444" : undefined }}>
-                            {noAvail ? "空きなし" : `${c.available}台 空き`}
+                            {noAvail
+                              ? "現在空きなし"
+                              : `${c.available}台 空き`}
                           </p>
+                          {earliest && !noAvail && (
+                            <p style={{ fontSize: "10px", color: "var(--yellow)", marginTop: "4px", fontWeight: 700 }}>
+                              {isToday ? "本日から利用可" : `${earliest.getMonth() + 1}/${earliest.getDate()}〜利用可`}
+                            </p>
+                          )}
                         </div>
                       );
                     })}
@@ -433,7 +517,9 @@ export default function BookingPage() {
                 <div style={{ marginBottom: "32px" }}>
                   <h3 className="step-heading">STEP 2 — 期間を選ぶ</h3>
                   <p style={{ color: "var(--light-gray)", fontSize: "12px", marginBottom: "16px" }}>
-                    開始日と終了日をカレンダーで選択してください
+                    {selectedClass
+                      ? "開始日と終了日をカレンダーで選択してください（グレーの日は空きなし）"
+                      : "先に車種を選択してください"}
                   </p>
                   <div className="calendar-wrap">
                     <DayPicker
@@ -441,7 +527,10 @@ export default function BookingPage() {
                       selected={dateRange}
                       onSelect={setDateRange}
                       locale={ja}
-                      disabled={{ before: new Date() }}
+                      disabled={[
+                        { before: new Date() },
+                        ...calendarDisabledDates,
+                      ]}
                       numberOfMonths={2}
                     />
                   </div>

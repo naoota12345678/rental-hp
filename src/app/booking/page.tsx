@@ -467,64 +467,71 @@ export default function BookingPage() {
                       </div>
                     ))}
                   </div>
-
-                  {selectedClass && classVehicles.length > 0 && (
-                    <div style={{ marginTop: "16px" }}>
-                      <label className="form-label-hp">車両を選択（任意）</label>
-                      <select
-                        value={selectedVehicleId}
-                        onChange={(e) => { setSelectedVehicleId(e.target.value); setDateRange(undefined); }}
-                        className="form-select-hp"
-                      >
-                        <option value="">おまかせ（空き車両を割当）</option>
-                        {classVehicles.map((v) => {
-                          const avail = vehicleAvailability.get(v.id);
-                          return (
-                            <option key={v.id} value={v.id} disabled={!avail?.available}>
-                              {v.maker} {v.model}（{v.plateNumber}）{!avail?.available ? ` — ${avail?.reason}` : ""}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  )}
                 </div>
 
-                {/* STEP 2: 期間選択（カレンダー） */}
-                <div style={{ marginBottom: "32px" }}>
-                  <h3 className="step-heading">STEP 2 — 期間を選ぶ</h3>
-                  <p style={{ color: "var(--light-gray)", fontSize: "12px", marginBottom: "16px" }}>
-                    {!selectedClass
-                      ? "先に車種を選択してください"
-                      : selectedVehicleId
+                {/* STEP 2: 車両選択 */}
+                {selectedClass && (
+                  <div style={{ marginBottom: "32px" }}>
+                    <h3 className="step-heading">STEP 2 — 車両を選ぶ</h3>
+                    <select
+                      value={selectedVehicleId}
+                      onChange={(e) => {
+                        const newId = e.target.value;
+                        setSelectedVehicleId(newId);
+                        setDateRange(undefined);
+                      }}
+                      className="form-select-hp"
+                    >
+                      <option value="">おまかせ（空き車両を割当）</option>
+                      {classVehicles.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.maker} {v.model}（{v.plateNumber}）
+                        </option>
+                      ))}
+                    </select>
+                    {selectedVehicleId && selectedVehicle && (
+                      <div style={{ marginTop: "8px", padding: "8px 12px", background: "rgba(255,214,0,0.08)", border: "1px solid rgba(255,214,0,0.3)", fontSize: "12px", color: "var(--yellow)" }}>
+                        選択中: {selectedVehicle.maker} {selectedVehicle.model}（{selectedVehicle.plateNumber}）— カレンダーにこの車両の空き状況を表示中
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* STEP 3: 期間選択（カレンダー） */}
+                {selectedClass && (
+                  <div style={{ marginBottom: "32px" }}>
+                    <h3 className="step-heading">STEP 3 — 期間を選ぶ</h3>
+                    <p style={{ color: "var(--light-gray)", fontSize: "12px", marginBottom: "16px" }}>
+                      {selectedVehicleId
                         ? "この車両の予約済み日はグレーで表示されます"
                         : "全車両が埋まっている日はグレーで表示されます"}
-                  </p>
-                  <div className="calendar-wrap">
-                    <DayPicker
-                      key={`${selectedClass}-${selectedVehicleId}`}
-                      mode="range"
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      locale={ja}
-                      disabled={[
-                        { before: new Date() },
-                        ...calendarDisabledDates,
-                      ]}
-                      numberOfMonths={2}
-                    />
-                  </div>
-                  {dateRange?.from && dateRange?.to && (
-                    <div style={{ marginTop: "16px", padding: "12px 16px", background: "var(--black)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                      <span style={{ color: "var(--white)", fontSize: "14px", fontWeight: 700 }}>
-                        {formatDate(startDate)} 〜 {formatDate(endDate)}
-                      </span>
-                      <span style={{ color: "var(--yellow)", fontWeight: 900, marginLeft: "12px" }}>
-                        {rentalDays}日間
-                      </span>
+                    </p>
+                    <div className="calendar-wrap">
+                      <DayPicker
+                        key={`cal-${selectedClass}-${selectedVehicleId}`}
+                        mode="range"
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        locale={ja}
+                        disabled={[
+                          { before: new Date() },
+                          ...calendarDisabledDates,
+                        ]}
+                        numberOfMonths={2}
+                      />
                     </div>
-                  )}
-                </div>
+                    {dateRange?.from && dateRange?.to && (
+                      <div style={{ marginTop: "16px", padding: "12px 16px", background: "var(--black)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                        <span style={{ color: "var(--white)", fontSize: "14px", fontWeight: 700 }}>
+                          {formatDate(startDate)} 〜 {formatDate(endDate)}
+                        </span>
+                        <span style={{ color: "var(--yellow)", fontWeight: 900, marginLeft: "12px" }}>
+                          {rentalDays}日間
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 料金プレビュー（STEP 1+2 完了後に即表示） */}
                 {selectedClass && rentalDays > 0 && (
@@ -563,9 +570,9 @@ export default function BookingPage() {
                   </div>
                 )}
 
-                {/* STEP 3: 受取方法 */}
+                {/* STEP 4: 受取方法 */}
                 <div style={{ marginBottom: "32px" }}>
-                  <h3 className="step-heading">STEP 3 — 受け取り方法</h3>
+                  <h3 className="step-heading">STEP 4 — 受け取り方法</h3>
                   <div className="booking-options" style={{ marginBottom: "16px" }}>
                     <div
                       className={`booking-option ${receiveMethod === "delivery" ? "active" : ""}`}
@@ -618,9 +625,9 @@ export default function BookingPage() {
                   )}
                 </div>
 
-                {/* STEP 4: お客様情報 */}
+                {/* STEP 5: お客様情報 */}
                 <div style={{ marginBottom: "32px" }}>
-                  <h3 className="step-heading">STEP 4 — お客様情報</h3>
+                  <h3 className="step-heading">STEP 5 — お客様情報</h3>
                   <div className="form-group">
                     <label className="form-label-hp">お名前 *</label>
                     <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="form-input-hp" placeholder="山田 太郎" />

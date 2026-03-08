@@ -146,17 +146,14 @@ function getUnavailableDates(
   return unavailable;
 }
 
-// --- 最短利用可能日 ---
-function getEarliestAvailableDate(
-  vehicles: Vehicle[],
+// --- 特定車両の予約不可日 ---
+function getUnavailableDatesForVehicle(
+  vehicle: Vehicle,
   bookings: ExistingBooking[],
-  vehicleClass: string,
-): Date | null {
-  const classVehicles = vehicles.filter((v) => v.vehicleClass === vehicleClass);
-  if (classVehicles.length === 0) return null;
-
+): Date[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const unavailable: Date[] = [];
 
   for (let i = 0; i < 90; i++) {
     const day = new Date(today);
@@ -164,12 +161,11 @@ function getEarliestAvailableDate(
     const nextDay = new Date(day);
     nextDay.setDate(nextDay.getDate() + 1);
 
-    const hasAvail = classVehicles.some(
-      (v) => isVehicleAvailable(v, bookings, day, nextDay).available
-    );
-    if (hasAvail) return day;
+    if (!isVehicleAvailable(vehicle, bookings, day, nextDay).available) {
+      unavailable.push(day);
+    }
   }
-  return null;
+  return unavailable;
 }
 
 // --- 料金計算 ---
@@ -335,21 +331,18 @@ export default function BookingPage() {
     [vehicles, selectedClass]
   );
 
-  // カレンダーで全車両埋まってる日をdisable
+  // カレンダーのdisabled日：車両選択時はその車両、おまかせ時は全台埋まりの日
   const calendarDisabledDates = useMemo(() => {
     if (!selectedClass) return [];
+    if (selectedVehicleId) {
+      // 特定車両 → その車両の予約不可日
+      const v = vehicles.find((v) => v.id === selectedVehicleId);
+      if (!v) return [];
+      return getUnavailableDatesForVehicle(v, bookings);
+    }
+    // おまかせ → 全車両が埋まってる日のみ
     return getUnavailableDates(vehicles, bookings, selectedClass);
-  }, [selectedClass, vehicles, bookings]);
-
-  // 車種ごとの最短利用可能日
-  const earliestDates = useMemo(() => {
-    const result = new Map<string, Date | null>();
-    const classSet = new Set(vehicles.map((v) => v.vehicleClass));
-    classSet.forEach((vc) => {
-      result.set(vc, getEarliestAvailableDate(vehicles, bookings, vc));
-    });
-    return result;
-  }, [vehicles, bookings]);
+  }, [selectedClass, selectedVehicleId, vehicles, bookings]);
 
   const { price: rentalPrice, breakdown } = useMemo(
     () => calcBestPrice(plans, selectedClass, rentalDays),
@@ -462,33 +455,17 @@ export default function BookingPage() {
                 <div style={{ marginBottom: "32px" }}>
                   <h3 className="step-heading">STEP 1 — 車種を選ぶ</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
-                    {availableClasses.map((c) => {
-                      const noAvail = c.available === 0;
-                      const earliest = earliestDates.get(c.key);
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const isToday = earliest && earliest.getTime() === today.getTime();
-                      return (
-                        <div
-                          key={c.key}
-                          onClick={() => { if (!noAvail) { setSelectedClass(c.key); setSelectedVehicleId(""); } }}
-                          className={`booking-option ${selectedClass === c.key ? "active" : ""}`}
-                          style={{ padding: "20px 16px", opacity: noAvail ? 0.4 : 1, cursor: noAvail ? "not-allowed" : "pointer" }}
-                        >
-                          <div className="option-title" style={{ fontSize: "14px", marginBottom: "4px" }}>{c.label}</div>
-                          <p className="option-desc" style={{ color: noAvail ? "#ff4444" : undefined }}>
-                            {noAvail
-                              ? "現在空きなし"
-                              : `${c.available}台 空き`}
-                          </p>
-                          {earliest && !noAvail && (
-                            <p style={{ fontSize: "10px", color: "var(--yellow)", marginTop: "4px", fontWeight: 700 }}>
-                              {isToday ? "本日から利用可" : `${earliest.getMonth() + 1}/${earliest.getDate()}〜利用可`}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {availableClasses.map((c) => (
+                      <div
+                        key={c.key}
+                        onClick={() => { setSelectedClass(c.key); setSelectedVehicleId(""); }}
+                        className={`booking-option ${selectedClass === c.key ? "active" : ""}`}
+                        style={{ padding: "20px 16px" }}
+                      >
+                        <div className="option-title" style={{ fontSize: "14px", marginBottom: "4px" }}>{c.label}</div>
+                        <p className="option-desc">{c.total}台</p>
+                      </div>
+                    ))}
                   </div>
 
                   {selectedClass && classVehicles.length > 0 && (
@@ -496,7 +473,7 @@ export default function BookingPage() {
                       <label className="form-label-hp">車両を選択（任意）</label>
                       <select
                         value={selectedVehicleId}
-                        onChange={(e) => setSelectedVehicleId(e.target.value)}
+                        onChange={(e) => { setSelectedVehicleId(e.target.value); setDateRange(undefined); }}
                         className="form-select-hp"
                       >
                         <option value="">おまかせ（空き車両を割当）</option>
@@ -517,9 +494,11 @@ export default function BookingPage() {
                 <div style={{ marginBottom: "32px" }}>
                   <h3 className="step-heading">STEP 2 — 期間を選ぶ</h3>
                   <p style={{ color: "var(--light-gray)", fontSize: "12px", marginBottom: "16px" }}>
-                    {selectedClass
-                      ? "開始日と終了日をカレンダーで選択してください（グレーの日は空きなし）"
-                      : "先に車種を選択してください"}
+                    {!selectedClass
+                      ? "先に車種を選択してください"
+                      : selectedVehicleId
+                        ? "この車両の予約済み日はグレーで表示されます"
+                        : "全車両が埋まっている日はグレーで表示されます"}
                   </p>
                   <div className="calendar-wrap">
                     <DayPicker

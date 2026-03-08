@@ -26,6 +26,15 @@ interface Vehicle {
   vehicleClass: string;
   status: string;
   storeId: string;
+  inspectionExpiry?: { seconds: number } | null;   // 車検期限
+  suspendedTo?: { seconds: number } | null;         // 停止終了日
+}
+
+interface ExistingBooking {
+  vehicleId: string;
+  startDate: string | { seconds: number };
+  endDate: string | { seconds: number };
+  status: string;
 }
 
 interface PricingPlan {
@@ -47,6 +56,64 @@ const VEHICLE_CLASS_LABELS: Record<string, string> = {
 };
 
 type ReceiveMethod = "delivery" | "pickup";
+
+// --- Firestore Timestamp → Date ---
+function tsToDate(ts: { seconds: number } | string | null | undefined): Date | null {
+  if (!ts) return null;
+  if (typeof ts === "string") return new Date(ts);
+  if (typeof ts === "object" && "seconds" in ts) return new Date(ts.seconds * 1000);
+  return null;
+}
+
+// --- 車両空き判定 ---
+function isVehicleAvailable(
+  vehicle: Vehicle,
+  bookings: ExistingBooking[],
+  wantStart: Date,
+  wantEnd: Date
+): { available: boolean; reason?: string; availableFrom?: Date } {
+  // 1. ステータスチェック
+  if (vehicle.status === "deleted") return { available: false, reason: "削除済み" };
+
+  // 2. 停止中 → suspendedTo の翌日から利用可能
+  if (vehicle.status === "suspended") {
+    const suspendedTo = tsToDate(vehicle.suspendedTo);
+    if (!suspendedTo) return { available: false, reason: "整備中（復帰未定）" };
+    const availFrom = new Date(suspendedTo);
+    availFrom.setDate(availFrom.getDate() + 1);
+    if (wantStart < availFrom) {
+      return {
+        available: false,
+        reason: `整備中（${availFrom.getMonth() + 1}/${availFrom.getDate()}〜利用可）`,
+        availableFrom: availFrom,
+      };
+    }
+    // suspendedTo を過ぎていれば利用可
+  }
+
+  // 3. 車検期限チェック — 貸出期間中に車検が切れる場合は不可
+  const inspExpiry = tsToDate(vehicle.inspectionExpiry);
+  if (inspExpiry && inspExpiry < wantEnd) {
+    return {
+      available: false,
+      reason: `車検切れ（${inspExpiry.getMonth() + 1}/${inspExpiry.getDate()}まで）`,
+    };
+  }
+
+  // 4. 既存予約・貸出との重複チェック
+  const vehicleBookings = bookings.filter((b) => b.vehicleId === vehicle.id);
+  for (const b of vehicleBookings) {
+    const bStart = tsToDate(b.startDate);
+    const bEnd = tsToDate(b.endDate);
+    if (!bStart || !bEnd) continue;
+    // 期間が重なるかチェック
+    if (wantStart < bEnd && wantEnd > bStart) {
+      return { available: false, reason: "予約済み" };
+    }
+  }
+
+  return { available: true };
+}
 
 // --- 料金計算 ---
 function calcBestPrice(plans: PricingPlan[], vehicleClass: string, days: number): { price: number; breakdown: string } {
@@ -104,6 +171,7 @@ export default function BookingPage() {
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [plans, setPlans] = useState<PricingPlan[]>([]);
+  const [bookings, setBookings] = useState<ExistingBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -124,10 +192,12 @@ export default function BookingPage() {
 
   const loadData = async () => {
     try {
-      const [areasSnap, vehiclesSnap, plansSnap] = await Promise.all([
+      const [areasSnap, vehiclesSnap, plansSnap, reservationsSnap, rentalsSnap] = await Promise.all([
         getDocs(collection(db, "deliveryAreas")),
         getDocs(collection(db, "vehicles")),
         getDocs(collection(db, "pricingPlans")),
+        getDocs(collection(db, "reservations")),
+        getDocs(collection(db, "rentals")),
       ]);
       setAreas(
         areasSnap.docs
@@ -138,11 +208,21 @@ export default function BookingPage() {
       setVehicles(
         vehiclesSnap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Vehicle))
-          .filter((v) => v.status === "active")
+          .filter((v) => v.status !== "deleted")
       );
       setPlans(
         plansSnap.docs.map((d) => ({ id: d.id, ...d.data() } as PricingPlan))
       );
+      // 予約・貸出（キャンセル以外）を統合
+      const allBookings: ExistingBooking[] = [
+        ...reservationsSnap.docs
+          .map((d) => d.data() as ExistingBooking)
+          .filter((r) => r.status !== "cancelled"),
+        ...rentalsSnap.docs
+          .map((d) => d.data() as ExistingBooking)
+          .filter((r) => r.status !== "cancelled" && r.status !== "returned"),
+      ];
+      setBookings(allBookings);
     } catch (err) {
       console.error("データ取得エラー:", err);
     } finally {
@@ -159,12 +239,39 @@ export default function BookingPage() {
     return diff > 0 ? diff : 0;
   }, [dateRange]);
 
+  // 期間を考慮した空き車両
+  const vehicleAvailability = useMemo(() => {
+    const result = new Map<string, { available: boolean; reason?: string; availableFrom?: Date }>();
+    if (!dateRange?.from || !dateRange?.to) {
+      // 期間未選択時は active のみ表示
+      vehicles.forEach((v) => {
+        result.set(v.id, { available: v.status === "active" });
+      });
+    } else {
+      vehicles.forEach((v) => {
+        result.set(v.id, isVehicleAvailable(v, bookings, dateRange.from!, dateRange.to!));
+      });
+    }
+    return result;
+  }, [vehicles, bookings, dateRange]);
+
   const availableClasses = useMemo(() => {
-    const classSet = new Set(vehicles.map((v) => v.vehicleClass));
+    const classCount = new Map<string, { total: number; available: number }>();
+    vehicles.forEach((v) => {
+      const cur = classCount.get(v.vehicleClass) || { total: 0, available: 0 };
+      cur.total++;
+      if (vehicleAvailability.get(v.id)?.available) cur.available++;
+      classCount.set(v.vehicleClass, cur);
+    });
     return Object.entries(VEHICLE_CLASS_LABELS)
-      .filter(([key]) => classSet.has(key))
-      .map(([key, label]) => ({ key, label }));
-  }, [vehicles]);
+      .filter(([key]) => classCount.has(key))
+      .map(([key, label]) => ({
+        key,
+        label,
+        total: classCount.get(key)!.total,
+        available: classCount.get(key)!.available,
+      }));
+  }, [vehicles, vehicleAvailability]);
 
   const classVehicles = useMemo(
     () => vehicles.filter((v) => v.vehicleClass === selectedClass),
@@ -282,19 +389,22 @@ export default function BookingPage() {
                 <div style={{ marginBottom: "32px" }}>
                   <h3 className="step-heading">STEP 1 — 車種を選ぶ</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
-                    {availableClasses.map((c) => (
-                      <div
-                        key={c.key}
-                        onClick={() => { setSelectedClass(c.key); setSelectedVehicleId(""); }}
-                        className={`booking-option ${selectedClass === c.key ? "active" : ""}`}
-                        style={{ padding: "20px 16px" }}
-                      >
-                        <div className="option-title" style={{ fontSize: "14px", marginBottom: "4px" }}>{c.label}</div>
-                        <p className="option-desc">
-                          {vehicles.filter((v) => v.vehicleClass === c.key).length}台 空き
-                        </p>
-                      </div>
-                    ))}
+                    {availableClasses.map((c) => {
+                      const noAvail = c.available === 0;
+                      return (
+                        <div
+                          key={c.key}
+                          onClick={() => { if (!noAvail) { setSelectedClass(c.key); setSelectedVehicleId(""); } }}
+                          className={`booking-option ${selectedClass === c.key ? "active" : ""}`}
+                          style={{ padding: "20px 16px", opacity: noAvail ? 0.4 : 1, cursor: noAvail ? "not-allowed" : "pointer" }}
+                        >
+                          <div className="option-title" style={{ fontSize: "14px", marginBottom: "4px" }}>{c.label}</div>
+                          <p className="option-desc" style={{ color: noAvail ? "#ff4444" : undefined }}>
+                            {noAvail ? "空きなし" : `${c.available}台 空き`}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {selectedClass && classVehicles.length > 0 && (
@@ -306,11 +416,14 @@ export default function BookingPage() {
                         className="form-select-hp"
                       >
                         <option value="">おまかせ（空き車両を割当）</option>
-                        {classVehicles.map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.maker} {v.model}（{v.plateNumber}）
-                          </option>
-                        ))}
+                        {classVehicles.map((v) => {
+                          const avail = vehicleAvailability.get(v.id);
+                          return (
+                            <option key={v.id} value={v.id} disabled={!avail?.available}>
+                              {v.maker} {v.model}（{v.plateNumber}）{!avail?.available ? ` — ${avail?.reason}` : ""}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   )}

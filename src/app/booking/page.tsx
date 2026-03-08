@@ -502,6 +502,7 @@ export default function BookingPage() {
                   </p>
                   <div className="calendar-wrap">
                     <DayPicker
+                      key={`${selectedClass}-${selectedVehicleId}`}
                       mode="range"
                       selected={dateRange}
                       onSelect={setDateRange}

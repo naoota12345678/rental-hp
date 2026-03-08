@@ -490,6 +490,59 @@ body {
   text-align: center;
 }
 
+/* ===== CALENDAR ===== */
+.calendar-wrap {
+  background: var(--black);
+  border: 2px solid rgba(255,255,255,0.1);
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.calendar-wrap .rdp-root {
+  --rdp-accent-color: var(--yellow);
+  --rdp-accent-background-color: rgba(255, 214, 0, 0.15);
+  --rdp-day-height: 40px;
+  --rdp-day-width: 40px;
+  --rdp-range_middle-background-color: rgba(255, 214, 0, 0.1);
+  --rdp-range_start-color: var(--black);
+  --rdp-range_end-color: var(--black);
+  --rdp-range_start-background: var(--yellow);
+  --rdp-range_end-background: var(--yellow);
+  color: var(--white);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+}
+
+.calendar-wrap .rdp-month_caption {
+  color: var(--white);
+  font-weight: 900;
+  font-size: 15px;
+}
+
+.calendar-wrap .rdp-weekday {
+  color: var(--yellow);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.calendar-wrap .rdp-day button {
+  color: var(--white);
+  border-radius: 0;
+}
+
+.calendar-wrap .rdp-day button:hover {
+  background: rgba(255, 214, 0, 0.2);
+}
+
+.calendar-wrap .rdp-disabled button {
+  color: rgba(255,255,255,0.15) !important;
+}
+
+.calendar-wrap .rdp-chevron {
+  fill: var(--yellow);
+}
+
 .step-heading {
   font-size: 14px;
   font-weight: 900;

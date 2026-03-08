@@ -5,6 +5,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, addDoc } from "firebase/firestore";
+import { DayPicker, DateRange } from "react-day-picker";
+import { ja } from "react-day-picker/locale";
+import "react-day-picker/style.css";
 
 // --- Types ---
 interface DeliveryArea {
@@ -46,14 +49,6 @@ const VEHICLE_CLASS_LABELS: Record<string, string> = {
 type ReceiveMethod = "delivery" | "pickup";
 
 // --- 料金計算 ---
-function calcRentalDays(start: string, end: string): number {
-  if (!start || !end) return 0;
-  const s = new Date(start);
-  const e = new Date(end);
-  const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : 0;
-}
-
 function calcBestPrice(plans: PricingPlan[], vehicleClass: string, days: number): { price: number; breakdown: string } {
   if (days <= 0) return { price: 0, breakdown: "" };
 
@@ -63,7 +58,6 @@ function calcBestPrice(plans: PricingPlan[], vehicleClass: string, days: number)
 
   if (classPlans.length === 0) return { price: 0, breakdown: "料金プラン未設定" };
 
-  // 貪欲法: 大きい期間から当てはめる
   let remaining = days;
   let total = 0;
   const parts: string[] = [];
@@ -78,14 +72,12 @@ function calcBestPrice(plans: PricingPlan[], vehicleClass: string, days: number)
     }
   }
 
-  // 残りの端数日数は日貸しで計算
   if (remaining > 0) {
     const dailyPlan = classPlans.find((p) => p.durationDays === 1);
     if (dailyPlan) {
       total += dailyPlan.basePrice * remaining;
       parts.push(`${dailyPlan.name} x${remaining} = ${(dailyPlan.basePrice * remaining).toLocaleString()}円`);
     } else {
-      // 日貸しプランがない場合、最小プランの超過日額
       const smallestPlan = classPlans[classPlans.length - 1];
       if (smallestPlan.perExtraDayPrice > 0) {
         total += smallestPlan.perExtraDayPrice * remaining;
@@ -97,6 +89,16 @@ function calcBestPrice(plans: PricingPlan[], vehicleClass: string, days: number)
   return { price: total, breakdown: parts.join(" + ") };
 }
 
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDate(s: string): string {
+  if (!s) return "";
+  const d = new Date(s);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
 // --- Page ---
 export default function BookingPage() {
   const [areas, setAreas] = useState<DeliveryArea[]>([]);
@@ -106,13 +108,11 @@ export default function BookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Form
   const [receiveMethod, setReceiveMethod] = useState<ReceiveMethod>("delivery");
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedArea, setSelectedArea] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -129,30 +129,20 @@ export default function BookingPage() {
         getDocs(collection(db, "vehicles")),
         getDocs(collection(db, "pricingPlans")),
       ]);
-
       setAreas(
         areasSnap.docs
           .map((d) => ({ id: d.id, ...d.data() } as DeliveryArea))
           .filter((a) => a.isActive !== false)
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       );
-
       setVehicles(
         vehiclesSnap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Vehicle))
           .filter((v) => v.status === "active")
       );
-
       setPlans(
         plansSnap.docs.map((d) => ({ id: d.id, ...d.data() } as PricingPlan))
       );
-      console.log("Loaded data:", {
-        areas: areasSnap.docs.length,
-        vehicles: vehiclesSnap.docs.length,
-        plans: plansSnap.docs.length,
-        vehicleStatuses: vehiclesSnap.docs.map(d => d.data().status),
-        planDetails: plansSnap.docs.map(d => ({ name: d.data().name, class: d.data().vehicleClass, days: d.data().durationDays, price: d.data().basePrice, active: d.data().isActive })),
-      });
     } catch (err) {
       console.error("データ取得エラー:", err);
     } finally {
@@ -160,7 +150,15 @@ export default function BookingPage() {
     }
   };
 
-  // 利用可能な車種クラス（車両が存在するもの）
+  const startDate = dateRange?.from ? toDateStr(dateRange.from) : "";
+  const endDate = dateRange?.to ? toDateStr(dateRange.to) : "";
+
+  const rentalDays = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return 0;
+    const diff = Math.ceil((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  }, [dateRange]);
+
   const availableClasses = useMemo(() => {
     const classSet = new Set(vehicles.map((v) => v.vehicleClass));
     return Object.entries(VEHICLE_CLASS_LABELS)
@@ -168,14 +166,11 @@ export default function BookingPage() {
       .map(([key, label]) => ({ key, label }));
   }, [vehicles]);
 
-  // 選択クラスに属する車両
   const classVehicles = useMemo(
     () => vehicles.filter((v) => v.vehicleClass === selectedClass),
     [vehicles, selectedClass]
   );
 
-  // 料金計算
-  const rentalDays = calcRentalDays(startDate, endDate);
   const { price: rentalPrice, breakdown } = useMemo(
     () => calcBestPrice(plans, selectedClass, rentalDays),
     [plans, selectedClass, rentalDays]
@@ -184,17 +179,15 @@ export default function BookingPage() {
   const selectedDeliveryArea = areas.find((a) => a.id === selectedArea);
   const deliveryPrice = receiveMethod === "delivery" && selectedDeliveryArea ? selectedDeliveryArea.price : 0;
   const totalPrice = rentalPrice + deliveryPrice;
-
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
 
   const handleSubmit = async () => {
     setError("");
     if (!selectedClass) { setError("車種クラスを選択してください。"); return; }
+    if (!startDate || !endDate) { setError("利用期間をカレンダーで選択してください。"); return; }
+    if (rentalDays <= 0) { setError("終了日は開始日より後にしてください。"); return; }
     if (!customerName.trim()) { setError("お名前を入力してください。"); return; }
     if (!customerPhone.trim()) { setError("電話番号を入力してください。"); return; }
-    if (!startDate) { setError("利用開始日を選択してください。"); return; }
-    if (!endDate) { setError("利用終了日を選択してください。"); return; }
-    if (rentalDays <= 0) { setError("終了日は開始日より後にしてください。"); return; }
     if (receiveMethod === "delivery" && !selectedArea) { setError("配送エリアを選択してください。"); return; }
     if (receiveMethod === "delivery" && !address.trim()) { setError("配送先住所を入力してください。"); return; }
 
@@ -251,7 +244,9 @@ export default function BookingPage() {
               <p style={{ color: "var(--light-gray)", fontSize: "14px" }}>
                 {VEHICLE_CLASS_LABELS[selectedClass]} {selectedVehicle ? `（${selectedVehicle.maker} ${selectedVehicle.model}）` : ""}
               </p>
-              <p style={{ color: "var(--light-gray)", fontSize: "14px" }}>{startDate} 〜 {endDate}（{rentalDays}日間）</p>
+              <p style={{ color: "var(--light-gray)", fontSize: "14px" }}>
+                {formatDate(startDate)} 〜 {formatDate(endDate)}（{rentalDays}日間）
+              </p>
               <p style={{ color: "var(--light-gray)", fontSize: "14px" }}>
                 {receiveMethod === "delivery" ? `配車（${selectedDeliveryArea?.areaName}）` : "店舗受取"}
               </p>
@@ -272,7 +267,7 @@ export default function BookingPage() {
       <Header />
       <main style={{ paddingTop: "64px" }}>
         <section className="booking" style={{ paddingTop: "80px" }}>
-          <div className="booking-inner" style={{ maxWidth: "600px" }}>
+          <div className="booking-inner" style={{ maxWidth: "640px" }}>
             <p className="section-label" style={{ textAlign: "center" }}>RESERVATION</p>
             <h2 className="booking-title">ご予約フォーム</h2>
             <p className="booking-sub">車種と期間を選んで、料金をご確認ください。</p>
@@ -321,48 +316,47 @@ export default function BookingPage() {
                   )}
                 </div>
 
-                {/* STEP 2: 期間選択 */}
+                {/* STEP 2: 期間選択（カレンダー） */}
                 <div style={{ marginBottom: "32px" }}>
                   <h3 className="step-heading">STEP 2 — 期間を選ぶ</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                    <div className="form-group">
-                      <label className="form-label-hp">利用開始日 *</label>
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="form-input-hp"
-                        min={new Date().toISOString().slice(0, 10)}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label-hp">利用終了日 *</label>
-                      <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="form-input-hp"
-                        min={startDate || new Date().toISOString().slice(0, 10)}
-                      />
-                    </div>
+                  <p style={{ color: "var(--light-gray)", fontSize: "12px", marginBottom: "16px" }}>
+                    開始日と終了日をカレンダーで選択してください
+                  </p>
+                  <div className="calendar-wrap">
+                    <DayPicker
+                      mode="range"
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      locale={ja}
+                      disabled={{ before: new Date() }}
+                      numberOfMonths={2}
+                    />
                   </div>
-                  {rentalDays > 0 && (
-                    <p style={{ color: "var(--yellow)", fontWeight: 700, fontSize: "14px", marginTop: "8px" }}>
-                      {rentalDays}日間
-                    </p>
+                  {dateRange?.from && dateRange?.to && (
+                    <div style={{ marginTop: "16px", padding: "12px 16px", background: "var(--black)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      <span style={{ color: "var(--white)", fontSize: "14px", fontWeight: 700 }}>
+                        {formatDate(startDate)} 〜 {formatDate(endDate)}
+                      </span>
+                      <span style={{ color: "var(--yellow)", fontWeight: 900, marginLeft: "12px" }}>
+                        {rentalDays}日間
+                      </span>
+                    </div>
                   )}
                 </div>
 
-                {/* 料金プレビュー */}
-                {selectedClass && rentalDays > 0 && (() => { console.log("Price calc:", { selectedClass, rentalDays, rentalPrice, breakdown, plansCount: plans.length, matchingPlans: plans.filter(p => p.vehicleClass === selectedClass).length }); return true; })() && (
+                {/* 料金プレビュー（STEP 1+2 完了後に即表示） */}
+                {selectedClass && rentalDays > 0 && (
                   <div style={{
                     background: "var(--black)",
-                    border: "2px solid rgba(255,255,255,0.1)",
-                    borderTop: "4px solid var(--yellow)",
+                    border: "2px solid var(--yellow)",
                     padding: "24px",
                     marginBottom: "32px",
+                    animation: "slideUp 0.3s ease-out",
                   }}>
-                    <h3 style={{ fontSize: "14px", fontWeight: 900, color: "var(--white)", marginBottom: "16px" }}>料金</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                      <span style={{ background: "var(--yellow)", color: "var(--black)", padding: "2px 8px", fontSize: "11px", fontWeight: 900 }}>PRICE</span>
+                      <span style={{ fontSize: "14px", fontWeight: 900, color: "var(--white)" }}>お見積り</span>
+                    </div>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                       <span style={{ color: "var(--light-gray)", fontSize: "13px" }}>
                         {VEHICLE_CLASS_LABELS[selectedClass]} / {rentalDays}日間
@@ -378,9 +372,11 @@ export default function BookingPage() {
                         <span style={{ color: "var(--white)", fontWeight: 700 }}>{deliveryPrice.toLocaleString()} 円</span>
                       </div>
                     )}
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "12px", marginTop: "12px", display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ borderTop: "2px solid var(--yellow)", paddingTop: "12px", marginTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ color: "var(--white)", fontWeight: 900 }}>合計</span>
-                      <span style={{ color: "var(--yellow)", fontWeight: 900, fontSize: "24px" }}>{totalPrice.toLocaleString()} 円</span>
+                      <span style={{ color: "var(--yellow)", fontWeight: 900, fontSize: "28px", fontFamily: "'Barlow Condensed', sans-serif" }}>
+                        {totalPrice.toLocaleString()} <span style={{ fontSize: "16px" }}>円</span>
+                      </span>
                     </div>
                   </div>
                 )}
@@ -461,7 +457,23 @@ export default function BookingPage() {
                   </div>
                 </div>
 
-                {/* 送信 */}
+                {/* 最終料金サマリー + 送信 */}
+                {selectedClass && rentalDays > 0 && (
+                  <div style={{ background: "var(--black)", padding: "24px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <p style={{ color: "var(--light-gray)", fontSize: "12px" }}>
+                          {VEHICLE_CLASS_LABELS[selectedClass]} / {rentalDays}日間
+                          {receiveMethod === "delivery" && selectedDeliveryArea ? ` + 配送（${selectedDeliveryArea.areaName}）` : ""}
+                        </p>
+                      </div>
+                      <span style={{ color: "var(--yellow)", fontWeight: 900, fontSize: "24px", fontFamily: "'Barlow Condensed', sans-serif" }}>
+                        {totalPrice.toLocaleString()} 円
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={handleSubmit}
                   disabled={submitting}

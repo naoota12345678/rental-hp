@@ -8,6 +8,7 @@ import { collection, getDocs, addDoc } from "firebase/firestore";
 import { DayPicker, DateRange } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import "react-day-picker/style.css";
+import MobileNav from "../MobileNav";
 
 // --- Types ---
 interface DeliveryArea {
@@ -240,6 +241,14 @@ export default function BookingPage() {
   const [address, setAddress] = useState("");
   const [memo, setMemo] = useState("");
   const [error, setError] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useEffect(() => { loadData(); }, []);
 
@@ -454,7 +463,7 @@ export default function BookingPage() {
                 {/* STEP 1: 車種選択 */}
                 <div style={{ marginBottom: "32px" }}>
                   <h3 className="step-heading">STEP 1 — 車種を選ぶ</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px" }}>
+                  <div className="booking-options" style={{ gap: "12px" }}>
                     {availableClasses.map((c) => (
                       <div
                         key={c.key}
@@ -517,7 +526,7 @@ export default function BookingPage() {
                           { before: new Date() },
                           ...calendarDisabledDates,
                         ]}
-                        numberOfMonths={2}
+                        numberOfMonths={isMobile ? 1 : 2}
                       />
                     </div>
                     {dateRange?.from && dateRange?.to && (
@@ -698,6 +707,10 @@ function Header() {
         <Link href="/">トップ</Link>
         <Link href="/booking" className="nav-btn">予約する</Link>
       </nav>
+      <MobileNav>
+        <Link href="/">トップ</Link>
+        <Link href="/booking">予約する</Link>
+      </MobileNav>
     </header>
   );
 }

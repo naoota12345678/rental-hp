@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import MobileNav from "./MobileNav";
 
 export default function Home() {
   return (
@@ -19,6 +20,12 @@ export default function Home() {
           <a href="#booking">店舗案内</a>
           <Link href="/booking" className="nav-btn">今すぐ予約</Link>
         </nav>
+        <MobileNav>
+          <a href="#features">サービス</a>
+          <a href="#price">料金</a>
+          <a href="#booking">店舗案内</a>
+          <Link href="/booking" className="nav-btn">今すぐ予約</Link>
+        </MobileNav>
       </header>
 
       {/* HERO */}
